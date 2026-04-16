@@ -33,3 +33,21 @@ Tests: deep HAL knowledge, understanding what happens under the hood
 
 12. How would you modify this driver to support multiple UART instances without duplicating code?
 Tests: driver architecture, passing handles vs global state, scalability
+
+
+# Must Know Cold
+These three because they lead the whole conversation:
+
+Question 3 — limitations of blocking and how to solve it. This is the most important one because it bridges to interrupt and DMA
+Question 9 — RTOS thread safety. Direct connection to your FreeRTOS layer
+Question 11 — what timeout actually means under the hood. Shows you understand what HAL is doing not just how to call it
+
+# Should Know Well
+
+Question 2 — timeout mid message problem. Very practical, comes up in real debugging
+Question 6 — terminator never arrives. Same category, real world edge case
+Question 12 — multiple UART instances. Shows architectural thinking
+
+# Understand But Don't Need to Recite
+
+Questions 1, 4, 5, 7, 8, 10 — these are good defensive programming habits you should practice in your code naturally. If you write the driver correctly they answer themselves. Nobody is going to ask you why you used snprintf in an embedded Linux interview.

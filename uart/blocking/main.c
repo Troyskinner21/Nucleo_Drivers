@@ -23,8 +23,14 @@ int main(void)
 
     /* ── TX examples ────────────────────────── */
 
-    // Send a string
-    UART_Blocking_TransmitString(&huart2, "UART Blocking Driver Init\r\n", 1000);
+    // Send a string and also error checking example. The function still gets called inside the if condition. If it successfully transmits the block will be skipped.
+    if (UART_Blocking_TransmitString(&huart2, "UART Blocking Driver Init\r\n", 1000) != UART_BLOCKING_OK)
+    {
+        // Blink onboard LED (PA5) to signal TX failure
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+        HAL_Delay(200);
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    }
 
     // Send a number
     UART_Blocking_TransmitNumber(&huart2, 42, 1000);

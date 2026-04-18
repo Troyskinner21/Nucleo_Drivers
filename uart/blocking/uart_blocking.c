@@ -62,7 +62,7 @@ UART_Blocking_Status UART_Blocking_TransmitNumber(UART_HandleTypeDef *huart,
                                                    uint32_t timeout)
 {
     char buf[16];
-    int len = snprintf(buf, sizeof(buf), "%ld\r\n", number);
+    int len = snprintf(buf, sizeof(buf), "%ld\r\n", number); //used snprintf intead of sprintf to avoid potential buffer overflow. snprintf will ensure that we do not write more than the size of the buffer, preventing overflow and potential security vulnerabilities.
 
     if (len <= 0) return UART_BLOCKING_ERROR;
 

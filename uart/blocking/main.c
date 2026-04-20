@@ -45,13 +45,22 @@ int main(void)
 
     /* ── RX examples ────────────────────────── */
 
-    // Receive a single byte
+    // Receive a single byte — error flag example
+    // If RX fails, set a flag and check it later instead of blocking with a delay
+    uint8_t rxError = 0;
     uint8_t byte;
-    UART_Blocking_ReceiveByte(&huart2, &byte, 1000);
+    if (UART_Blocking_ReceiveByte(&huart2, &byte, 1000) != UART_BLOCKING_OK)
+    {
+        rxError = 1; // flag is set, handle it later in your main loop
+    }
 
-    // Receive fixed length buffer
+    // Receive fixed length buffer — error logging example
+    // On failure, transmit an error message back to the PC terminal so you can see it
     uint8_t rxBuf[10];
-    UART_Blocking_ReceiveBuffer(&huart2, rxBuf, sizeof(rxBuf), 1000);
+    if (UART_Blocking_ReceiveBuffer(&huart2, rxBuf, sizeof(rxBuf), 1000) != UART_BLOCKING_OK)
+    {
+        UART_Blocking_TransmitString(&huart2, "[ERROR] ReceiveBuffer timed out\r\n", 1000);
+    }
 
     // Receive a string until newline terminator
     uint8_t lineBuf[64];

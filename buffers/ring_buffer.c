@@ -14,7 +14,7 @@ RingBuffer_Status RingBuffer_Write(RingBuffer_t *rb, uint8_t byte)
 
     if (nextHead == rb->tail)
     {
-        return RING_BUFFER_FULL; // byte dropped
+        return RING_BUFFER_FULL; // buffer full — byte not written
     }
 
     rb->buffer[rb->head] = byte;

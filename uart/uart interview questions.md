@@ -192,3 +192,88 @@ Every periodic task in the loop runs sequentially — if one task stalls (a long
 
 **I14. What happens if TX takes longer than the time between received bytes?**
 The main loop is blocked waiting for txComplete (or returning UART_IT_BUSY and not echoing). Meanwhile bytes continue arriving and the ISR writes them into the ring buffer. If TX stays busy long enough the ring buffer fills and incoming bytes are not written. The solution is to buffer outgoing data as well — a TX ring buffer — so the main loop writes to it immediately and a separate mechanism drains it as TX completes.
+
+---
+
+# DMA Questions
+
+1. What is the fundamental difference between DMA and interrupt-driven UART — what is the CPU actually doing during each transfer?
+Tests: core DMA concept, understanding that DMA is a bus master that accesses memory independently of the CPU
+
+2. Why does the buffer have to stay valid until TxCpltCallback fires — what happens if you pass a stack-allocated buffer to HAL_UART_Transmit_DMA and the function returns?
+Tests: DMA memory ownership, one of the most common DMA bugs in practice
+
+3. In circular mode, what is happening between TxHalfCpltCallback and TxCpltCallback — why is it safe to write to the first half while DMA is still running?
+Tests: double-buffer / ping-pong understanding, the core concept behind circular DMA
+
+4. Why must MX_DMA_Init() be called before MX_USART2_UART_Init() in the CubeMX generated code?
+Tests: DMA controller initialization order, a real bug that produces no obvious error message
+
+5. What happens if your TxHalfCpltCallback takes too long to refill the buffer and DMA laps it?
+Tests: real-time constraint awareness, buffer underrun, same class of problem as ring buffer overflow in interrupt mode
+
+6. Normal mode vs circular mode — when would you choose each?
+Tests: architectural decision making, knowing that normal mode is for one-shot transfers and circular is for continuous streams
+
+7. Can you receive with DMA the same way you transmit — and what extra consideration does RX circular mode introduce that TX does not have?
+Tests: DMA RX awareness, the fact that RX data length is often unknown upfront unlike TX, leads into IDLE line interrupt discussion
+
+8. What is the cache coherency problem on Cortex-M7 devices when using DMA, and does it apply to the Nucleo-L476RG?
+Tests: depth of knowledge, L476 is Cortex-M4 with no cache so it does not apply — but knowing why shows real understanding
+
+9. How does DMA TX overhead compare to interrupt TX at low baud rates vs high baud rates — when does DMA stop being worth the complexity?
+Tests: engineering judgment, DMA setup overhead is fixed so it only pays off when transferring enough bytes
+
+10. If both DMA and the CPU are trying to access the same memory bus simultaneously, what happens?
+Tests: AHB bus arbitration, DMA priority, understanding that DMA can stall the CPU on bus contention
+
+### Must Know Cold
+
+Question 2 — buffer lifetime. The single most common DMA bug and an immediate red flag if you don't know it
+Question 3 — circular mode double-buffer pattern. The whole point of circular DMA — if you can't explain this you don't understand it
+Question 7 — DMA RX and the unknown length problem. Shows you've thought beyond TX and leads into IDLE line interrupt
+
+### Should Know Well
+
+Question 1 — CPU involvement during DMA. Fundamental concept, must be able to contrast clearly with interrupt mode
+Question 5 — callback overrun. Real-time constraint that circular mode imposes, same family as ring buffer overflow
+Question 6 — normal vs circular selection. Shows architectural judgment
+
+### Understand But Don't Need to Recite
+
+Questions 4, 8, 9, 10 — initialization order, cache coherency, overhead tradeoffs, and bus arbitration. Good depth questions that separate candidates who have actually debugged DMA issues from those who have only read about it.
+
+---
+
+## DMA
+
+**D1. Fundamental difference between DMA and interrupt-driven UART?**
+In interrupt mode the CPU handles each byte — the TX ISR fires once per byte sent, loads the next byte, and returns. In DMA mode the DMA controller is a separate bus master — it reads from memory and writes directly to the UART data register entirely on its own. The CPU sets up the transfer once and is not involved again until TxCpltCallback fires at the end. For large transfers this removes thousands of interrupt entries per second.
+
+**D2. Why must the buffer stay valid until TxCpltCallback fires?**
+HAL_UART_Transmit_DMA gives the DMA controller a pointer to your buffer and returns immediately. The DMA hardware reads bytes from that memory address on its own schedule. If the buffer is on the stack and the function returns, the stack frame is reclaimed and that memory may be overwritten by the next function call — the DMA is now reading corrupted data. Use static, global, or heap-allocated buffers for DMA transfers.
+
+**D3. Why is it safe to write the first half while DMA reads the second half in circular mode?**
+DMA reads sequentially from index 0 to the end, then wraps. TxHalfCpltCallback fires when it crosses the midpoint and starts reading indices 5120–10239. At that moment indices 0–5119 are no longer being read — the CPU can safely write fresh data there. By the time DMA wraps back to index 0, TxCpltCallback has fired and the CPU has already refilled the second half. The two halves are never accessed by both CPU and DMA simultaneously — that is the entire point of the double-buffer pattern.
+
+**D4. Why must MX_DMA_Init() be called before MX_USART2_UART_Init()?**
+MX_USART2_UART_Init() links the UART handle to a DMA stream. If the DMA controller clock and stream registers are not initialized first, that linkage silently fails — the handle has no DMA stream attached and HAL_UART_Transmit_DMA falls back to nothing or returns an error with no obvious message. CubeMX generates the correct order automatically but if you rearrange init calls manually this breaks.
+
+**D5. What if TxHalfCpltCallback takes too long and DMA laps the CPU?**
+DMA wraps back to index 0 before the CPU has finished writing fresh data into the first half. DMA reads a mix of old and new data — the output is corrupted. This is a buffer underrun. The callback must complete before DMA reaches the end of the second half — that window is exactly the time to transmit half the buffer at the configured baud rate. Keep callbacks short; offload heavy data generation to the main loop and pre-stage data before DMA needs it.
+
+**D6. Normal mode vs circular mode — when to choose each?**
+Normal mode: one-shot transfer of a known buffer — send a string, send a packet, send a fixed block. DMA stops after len bytes and TxCpltCallback fires once. Use this for anything with a defined start and end.
+Circular mode: continuous stream with no defined end — audio output, sensor data logging, protocol streams. DMA never stops on its own; the callbacks keep the buffer filled. Use this when you need sustained throughput with minimal CPU involvement.
+
+**D7. DMA RX and what circular mode introduces that TX does not?**
+TX length is always known — you decide how many bytes to send. RX length is often unknown — you don't know when the sender will stop. In circular RX mode you don't know which index DMA is currently writing to, so you can't tell how much valid data has arrived from TxCpltCallback alone. The solution is the UART IDLE line interrupt — it fires when the bus goes silent after receiving bytes, at which point you read the DMA counter to calculate how many bytes arrived. This is the standard pattern for unknown-length DMA RX.
+
+**D8. Cache coherency on Cortex-M7 vs Cortex-M4 (L476RG)?**
+Cortex-M7 has a data cache. DMA writes to RAM but the CPU may read a stale cached copy — the cache does not know DMA modified the memory. You must invalidate the cache region before reading DMA-received data, and clean it before DMA reads CPU-written data. The L476RG is Cortex-M4 which has no data cache, so this problem does not exist on this board. On STM32H7 or STM32F7 you must handle it explicitly.
+
+**D9. When does DMA stop being worth the complexity vs interrupt mode?**
+DMA has fixed setup overhead — configuring the stream, the handle linkage, and the callback structure. For short transfers (a few bytes) that overhead exceeds the cost of the equivalent interrupt-per-byte approach. The break-even point is roughly in the tens of bytes range at typical baud rates. For anything large — hundreds of bytes, kilobytes, or continuous streams — DMA wins decisively. The complexity of circular mode double-buffering is only justified for sustained high-throughput transfers.
+
+**D10. What happens when DMA and CPU access the same memory bus simultaneously?**
+The AHB bus arbiter serializes the requests — one wins and the other stalls. DMA priority is configurable in CubeMX (low, medium, high, very high). If DMA has higher priority it can stall the CPU on every bus access, increasing interrupt latency and slowing code execution. If the CPU has higher priority DMA throughput drops. In practice set DMA priority based on how time-critical the transfer is, and keep DMA burst sizes reasonable to avoid starving the CPU for extended periods.

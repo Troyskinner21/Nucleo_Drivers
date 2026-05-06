@@ -37,3 +37,36 @@ FreeRTOS → separate tasks for sensor reading, WiFi transmission, data logging
 Bootloader → OTA firmware updates over WiFi
 
 That last project is genuinely impressive because it uses everything you've built. Every single layer you learned has a reason to exist in one cohesive system.
+
+## 5. Linux
+This is the cherry on top. You can take your UART/SPI/I2C drivers and port them to Linux kernel modules. Then you can write user-space applications that interact with those drivers, maybe even expose a simple REST API to read sensor data or trigger actions. This is where you see how all the embedded concepts scale up to real-world applications. Build a simple web server on the Nucleo that serves sensor data in real-time, and you have a full-stack embedded project that goes from bare-metal to Linux. You can build using Buildroot to create a custom Linux image for the Nucleo, and then use Yocto to take it even further with more complex applications and optimizations. This is where you can really show off your skills and have fun with it
+
+
+# SPI vs. UART vs. I2C
+
+## UART
+- **Wires:** 2 (TX, RX)
+- **How it works:** Asynchronous — no shared clock. Both sides agree on baud rate ahead of time. Bytes just stream out; there's no inherent framing so the application defines message boundaries (e.g. newline, fixed length, length-prefix byte).
+- **Use when:** Talking to a PC terminal, GPS module, Bluetooth/WiFi module, or any device where you want a simple point-to-point byte stream. Only one device on each end — UART is not a bus.
+
+## SPI
+- **Wires:** 4 (SCK, MOSI, MISO, CS per slave)
+- **How it works:** Synchronous — master drives the clock. Transactions are explicit: assert CS, clock out/in an exact number of bytes, deassert CS. Full-duplex, meaning TX and RX happen at the same time on every clock edge.
+- **Use when:** You need speed or full-duplex on-chip peripherals: flash memory (W25Q128), SD cards, high-speed sensors, displays. Multiple slaves are supported by giving each its own CS line.
+
+## I2C
+- **Wires:** 2 (SDA, SCL) — shared by all devices on the bus
+- **How it works:** Synchronous — master drives the clock. Every slave has a 7-bit address baked in at the factory. The master sends the address at the start of each transaction; only the matching slave responds. Half-duplex (data flows one direction at a time).
+- **Use when:** You have several low-speed peripherals and want to minimise wire count. Typical targets: temperature/humidity sensors (BME280), IMUs (MPU-6050), EEPROMs, real-time clocks. Not suitable for fast or large data transfers.
+
+## Quick comparison
+
+| | UART | SPI | I2C |
+|---|---|---|---|
+| Wires | 2 | 4 + 1 CS/slave | 2 |
+| Clock | None (async) | Master (sync) | Master (sync) |
+| Duplex | Full | Full | Half |
+| Multi-slave | No | Yes (one CS each) | Yes (by address) |
+| Speed | Low–medium | Fast | Low–medium |
+| Typical use | Debug, modules | Flash, displays | Sensors, EEPROMs |
+

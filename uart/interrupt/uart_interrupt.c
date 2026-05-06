@@ -203,7 +203,8 @@ UART_IT_Status UART_IT_ReceiveUntil(uint8_t *buf, uint16_t maxLen,
 {
     if (buf == NULL || maxLen == 0 || received == NULL) return UART_IT_ERROR;
 
-    *received = 0;
+    /* Do NOT reset *received — caller initialises it to 0 and maintains it
+     * across calls so bytes accumulate in buf until the terminator arrives   */
     uint8_t byte = 0;
 
     while (*received < maxLen - 1)

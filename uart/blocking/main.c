@@ -74,10 +74,11 @@ int main(void)
     while (1)
     {
         // Wait for a line terminated by newline
-        if (UART_Blocking_ReceiveUntil(&huart2, echoBuf, sizeof(echoBuf), '\n', 5000) == UART_BLOCKING_OK)
+        if (UART_Blocking_ReceiveUntil(&huart2, echoBuf, sizeof(echoBuf), '\r', 5000) == UART_BLOCKING_OK)
         {
             // Echo it back
             UART_Blocking_TransmitString(&huart2, (char *)echoBuf, 1000);
+            HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
         }
     }
 }

@@ -70,3 +70,16 @@ This is the cherry on top. You can take your UART/SPI/I2C drivers and port them 
 | Speed | Low–medium | Fast | Low–medium |
 | Typical use | Debug, modules | Flash, displays | Sensors, EEPROMs |
 
+
+## I2C data transfer explained
+
+I2C has no `ReceiveBuffer`, `ReceiveUntil`, or `ReceiveString` equivalents because it is a register protocol, not a stream protocol.
+
+UART needs those variants because bytes arrive unprompted and you don't know when a message ends — so you need:
+- `ReceiveByte` — grab one byte
+- `ReceiveBuffer` — grab a fixed count
+- `ReceiveUntil` — grab until a terminator
+
+I2C has none of those problems because you always know exactly how many bytes are coming back before the transfer starts. The register address you send dictates what the slave returns. The slave can't spontaneously send extra or fewer bytes — the master clocks exactly `len` bytes and then issues a STOP. No stream to parse, no terminator to look for.
+
+Sensor data is always raw bytes. A BME280 temperature reading comes back as 3 bytes that you reassemble and run through a compensation formula. Interpreting those as a "string" or "number" belongs in the application layer above the driver, not inside the driver itself.

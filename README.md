@@ -70,8 +70,19 @@ This is the cherry on top. You can take your UART/SPI/I2C drivers and port them 
 | Speed | Low–medium | Fast | Low–medium |
 | Typical use | Debug, modules | Flash, displays | Sensors, EEPROMs |
 
+## SPI transmit/recieve at the same time explained (full duplex by default)
+When the master is “receiving,” it must transmit:
+• A real command byte (once, if required by the device protocol), then
+• Dummy bytes whose only purpose is to generate clock pulses.
 
-## I2C data transfer explained
+SPI is full‑duplex at the wire level: data is shifted in and out of master at the same time, synchronized by the master‑generated clock. Think of the conveyor belts that only moves in discrete, synchronized jumps instead of continous flow.
+Each SPI clock edge shifts one bit out of the master and one bit into the master simultaneously.
+
+We can do transmit‑only from the master and ignore received data, because the slave may not be sending anything meaningful.
+We cannot do receive‑only, because the master must generate clock to receive data, and generating clock always forces the master to transmit something on MOSI. After the command byte, the master cannot stop transmitting — instead it sends dummy data while receiving real data from the slave.
+Think of SPI like a conveyor belt moving in both directions at once: you can ignore one direction, but you cannot stop one side without stopping the other. Both always move together.
+
+## Synchronous data transfer explained
 
 I2C has no `ReceiveBuffer`, `ReceiveUntil`, or `ReceiveString` equivalents because it is a register protocol, not a stream protocol.
 
@@ -83,3 +94,4 @@ UART needs those variants because bytes arrive unprompted and you don't know whe
 I2C has none of those problems because you always know exactly how many bytes are coming back before the transfer starts. The register address you send dictates what the slave returns. The slave can't spontaneously send extra or fewer bytes — the master clocks exactly `len` bytes and then issues a STOP. No stream to parse, no terminator to look for.
 
 Sensor data is always raw bytes. A BME280 temperature reading comes back as 3 bytes that you reassemble and run through a compensation formula. Interpreting those as a "string" or "number" belongs in the application layer above the driver, not inside the driver itself.
+

@@ -70,6 +70,15 @@ This is the cherry on top. You can take your UART/SPI/I2C drivers and port them 
 | Speed | Low–medium | Fast | Low–medium |
 | Typical use | Debug, modules | Flash, displays | Sensors, EEPROMs |
 
+| Feature         | UART              | SPI                          | I²C                          |
+|-----------------|------------------|------------------------------|------------------------------|
+| Type            | Stream           | Transaction-based            | Message-based                |
+| Framing         | Per-byte only    | None                         | Built-in (START/STOP)        |
+| Message concept | ❌ No            | ⚠️ Only via CS               | ✅ Yes                       |
+| Addressing      | ❌ No            | ❌ No                        | ✅ Yes                       |
+| Boundaries      | ❌ None          | ✅ CS rising edge            | ✅ START/STOP                |
+| Protocol layer  | Application only | Device-specific              | Defined in hardware spec     |
+
 ## SPI transmit/recieve at the same time explained (full duplex by default)
 When the master is “receiving,” it must transmit:
 • A real command byte (once, if required by the device protocol), then
